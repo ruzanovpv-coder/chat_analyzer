@@ -1,19 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { getYooKassaPayment } from '@/lib/yookassa'
 import { sendAnalysisEmail } from '@/lib/email'
+import { getSupabaseAdminClient } from '@/lib/supabase/admin'
 
 export const runtime = 'nodejs'
-
-const admin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
 
 const PRICE_RUB = '250.00'
 
 export async function POST(req: NextRequest) {
   try {
+    const admin = getSupabaseAdminClient()
     const token = process.env.YOOKASSA_WEBHOOK_TOKEN
     if (token) {
       const headerToken = req.headers.get('x-yookassa-webhook-token')

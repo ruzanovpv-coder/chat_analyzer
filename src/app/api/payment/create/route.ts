@@ -1,21 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
-import { createClient } from '@supabase/supabase-js'
 import crypto from 'crypto'
 import { createYooKassaPayment } from '@/lib/yookassa'
+import { getSupabaseAdminClient } from '@/lib/supabase/admin'
 
 export const runtime = 'nodejs'
-
-const admin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
 
 const PRICE_RUB = '250.00'
 
 export async function POST(req: NextRequest) {
   try {
+    const admin = getSupabaseAdminClient()
     const auth = createRouteHandlerClient({ cookies })
     const { data: { session } } = await auth.auth.getSession()
     if (!session) {

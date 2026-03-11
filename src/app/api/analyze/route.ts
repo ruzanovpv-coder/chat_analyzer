@@ -1,23 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { analyzeChatWithQwen } from '@/lib/qwen-api'
 import { sendAnalysisEmail } from '@/lib/email'
+import { getSupabaseAdminClient } from '@/lib/supabase/admin'
 
 export const runtime = 'nodejs'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
-
 export async function POST(request: NextRequest) {
+  let supabase: ReturnType<typeof getSupabaseAdminClient> | null = null
   let analysisId: number | string | undefined
   let sessionUserId: string | undefined
   let sessionUserEmail: string | undefined
 
   try {
+    supabase = getSupabaseAdminClient()
     const body = await request.json().catch(() => ({}))
     analysisId = body.analysisId
 
@@ -120,7 +117,7 @@ export async function POST(request: NextRequest) {
     console.error('Analysis error:', error)
 
     // Обновление статуса на failed
-    if (analysisId && sessionUserId) {
+    if (supabase && analysisId && sessionUserId) {
       await supabase
         .from('analyses')
         .update({ status: 'failed' })
