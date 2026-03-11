@@ -154,6 +154,10 @@ export default function ResultPage() {
                   <div className="mt-2 text-sm">
                     Если ошибка про RLS/UPDATE — выполни SQL из `supabase/migrations/20260311_allow_update_analyses.sql` в Supabase SQL Editor.
                   </div>
+                  <div className="mt-2 text-sm">
+                    Если ошибка про API key/JWT — проверь в Vercel переменную `SUPABASE_SERVICE_ROLE_KEY` (должна быть Secret key `sb_secret_...`).
+                    Можно временно удалить её и работать через RLS после выполнения SQL выше.
+                  </div>
                 </div>
               ) : null}
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>

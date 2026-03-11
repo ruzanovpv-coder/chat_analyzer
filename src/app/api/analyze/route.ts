@@ -17,13 +17,33 @@ function isPermissionError(message: string) {
   )
 }
 
+function isAuthKeyError(message: string) {
+  const m = message.toLowerCase()
+  return (
+    m.includes('invalid api key') ||
+    m.includes('apikey') && m.includes('invalid') ||
+    m.includes('jwt') && m.includes('invalid') ||
+    m.includes('401') ||
+    m.includes('403')
+  )
+}
+
 export async function POST(request: NextRequest) {
   const authSupabase = createRouteHandlerClient({ cookies })
 
   const body = await request.json().catch(() => ({}))
-  const analysisId = body.analysisId as number | string | undefined
-  if (!analysisId) {
+  const rawAnalysisId = body.analysisId as number | string | undefined
+  if (!rawAnalysisId) {
     return NextResponse.json({ error: 'analysisId is required' }, { status: 400 })
+  }
+
+  const analysisId =
+    typeof rawAnalysisId === 'number'
+      ? rawAnalysisId
+      : Number.parseInt(String(rawAnalysisId), 10)
+
+  if (!Number.isFinite(analysisId)) {
+    return NextResponse.json({ error: 'analysisId must be a number' }, { status: 400 })
   }
 
   const { data: { session } } = await authSupabase.auth.getSession()
@@ -35,12 +55,36 @@ export async function POST(request: NextRequest) {
   const sessionUserEmail = session.user.email ?? undefined
 
   // Prefer admin client if configured (bypasses RLS), but fall back to the user's session client.
-  let supabase: any = authSupabase
+  let admin: any = null
   try {
-    supabase = getSupabaseAdminClient()
+    admin = getSupabaseAdminClient()
   } catch {
-    supabase = authSupabase
+    admin = null
   }
+
+  const getWorkingClient = async () => {
+    if (!admin) return authSupabase
+
+    const { error } = await admin
+      .from('analyses')
+      .select('id')
+      .eq('id', analysisId)
+      .eq('user_id', sessionUserId)
+      .maybeSingle()
+
+    if (!error) return admin
+
+    const msg = String((error as any)?.message || error)
+    if (isAuthKeyError(msg)) {
+      // Admin key is misconfigured; fall back to session client which uses anon key + cookies.
+      return authSupabase
+    }
+
+    // Non-auth error: keep admin, we will report the real message below.
+    return admin
+  }
+
+  const supabase = await getWorkingClient()
 
   try {
     const { data: analysis, error: fetchError } = await supabase
@@ -50,7 +94,14 @@ export async function POST(request: NextRequest) {
       .eq('user_id', sessionUserId)
       .single()
 
-    if (fetchError || !analysis) {
+    if (fetchError) {
+      return NextResponse.json(
+        { error: (fetchError as any)?.message || 'Ошибка чтения анализа' },
+        { status: 500 }
+      )
+    }
+
+    if (!analysis) {
       return NextResponse.json({ error: 'Анализ не найден' }, { status: 404 })
     }
 
@@ -148,4 +199,3 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: error?.message || 'Ошибка анализа' }, { status: 500 })
   }
 }
-
