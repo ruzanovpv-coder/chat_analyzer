@@ -15,6 +15,13 @@ export function getSupabaseClient(): SupabaseClient {
 // Avoid eager initialization at module load time (can run during Vercel build/prerender).
 export const supabase: SupabaseClient = new Proxy({} as SupabaseClient, {
   get(_target, prop) {
-    return (getSupabaseClient() as any)[prop]
+    const client = getSupabaseClient() as any
+    const value = client[prop as any]
+
+    if (typeof value === 'function') {
+      return value.bind(client)
+    }
+
+    return value
   },
 }) as any
