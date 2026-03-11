@@ -137,21 +137,21 @@ CREATE POLICY "Chat files: select own folder" ON storage.objects
   FOR SELECT TO authenticated
   USING (
     bucket_id = 'chat-files'
-    AND storage.foldername(name)[1] = auth.uid()::text
+    AND (storage.foldername(name))[1] = auth.uid()::text
   );
 
 CREATE POLICY "Chat files: insert own folder" ON storage.objects
   FOR INSERT TO authenticated
   WITH CHECK (
     bucket_id = 'chat-files'
-    AND storage.foldername(name)[1] = auth.uid()::text
+    AND (storage.foldername(name))[1] = auth.uid()::text
   );
 
 CREATE POLICY "Chat files: delete own folder" ON storage.objects
   FOR DELETE TO authenticated
   USING (
     bucket_id = 'chat-files'
-    AND storage.foldername(name)[1] = auth.uid()::text
+    AND (storage.foldername(name))[1] = auth.uid()::text
   );
 
 -- Политики доступа для Supabase
