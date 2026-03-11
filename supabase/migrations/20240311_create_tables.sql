@@ -38,6 +38,9 @@ CREATE TABLE IF NOT EXISTS analyses (
   result_text TEXT,
   result_teaser TEXT,
   is_paid BOOLEAN DEFAULT FALSE,
+  paid_at TIMESTAMP WITH TIME ZONE,
+  yookassa_payment_id TEXT,
+  yookassa_payment_status TEXT,
   email_sent BOOLEAN DEFAULT FALSE,
   email_sent_at TIMESTAMP WITH TIME ZONE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -50,6 +53,17 @@ RETURNS void AS $$
 BEGIN
   UPDATE users 
   SET generations_used = generations_used + 1,
+      updated_at = NOW()
+  WHERE id = user_uuid;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Функция для покупки дополнительной генерации (оплата 250₽)
+CREATE OR REPLACE FUNCTION increment_generation_limit(user_uuid UUID, delta INTEGER)
+RETURNS void AS $$
+BEGIN
+  UPDATE users
+  SET generations_limit = generations_limit + delta,
       updated_at = NOW()
   WHERE id = user_uuid;
 END;
@@ -80,6 +94,7 @@ CREATE TRIGGER update_analyses_updated_at
 CREATE INDEX IF NOT EXISTS idx_analyses_user_id ON analyses(user_id);
 CREATE INDEX IF NOT EXISTS idx_analyses_status ON analyses(status);
 CREATE INDEX IF NOT EXISTS idx_analyses_created_at ON analyses(created_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_analyses_yookassa_payment_id ON analyses(yookassa_payment_id) WHERE yookassa_payment_id IS NOT NULL;
 
 -- Row Level Security (RLS)
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
@@ -100,11 +115,6 @@ CREATE POLICY "Users can select own data" ON users
   FOR SELECT TO authenticated
   USING (auth.uid() = id);
 
-CREATE POLICY "Users can update own data" ON users
-  FOR UPDATE TO authenticated
-  USING (auth.uid() = id)
-  WITH CHECK (auth.uid() = id);
-
 CREATE POLICY "Users can select own analyses" ON analyses
   FOR SELECT TO authenticated
   USING (auth.uid() = user_id);
@@ -113,10 +123,36 @@ CREATE POLICY "Users can insert own analyses" ON analyses
   FOR INSERT TO authenticated
   WITH CHECK (auth.uid() = user_id);
 
-CREATE POLICY "Users can update own analyses" ON analyses
-  FOR UPDATE TO authenticated
-  USING (auth.uid() = user_id)
-  WITH CHECK (auth.uid() = user_id);
+-- Supabase Storage bucket для файлов чата
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('chat-files', 'chat-files', false)
+ON CONFLICT (id) DO NOTHING;
+
+-- Доступ к файлам только внутри своей папки: `${auth.uid()}/...`
+DROP POLICY IF EXISTS "Chat files: select own folder" ON storage.objects;
+DROP POLICY IF EXISTS "Chat files: insert own folder" ON storage.objects;
+DROP POLICY IF EXISTS "Chat files: delete own folder" ON storage.objects;
+
+CREATE POLICY "Chat files: select own folder" ON storage.objects
+  FOR SELECT TO authenticated
+  USING (
+    bucket_id = 'chat-files'
+    AND storage.foldername(name)[1] = auth.uid()::text
+  );
+
+CREATE POLICY "Chat files: insert own folder" ON storage.objects
+  FOR INSERT TO authenticated
+  WITH CHECK (
+    bucket_id = 'chat-files'
+    AND storage.foldername(name)[1] = auth.uid()::text
+  );
+
+CREATE POLICY "Chat files: delete own folder" ON storage.objects
+  FOR DELETE TO authenticated
+  USING (
+    bucket_id = 'chat-files'
+    AND storage.foldername(name)[1] = auth.uid()::text
+  );
 
 -- Политики доступа для Supabase
 -- Пользователи могут читать только свои данные
@@ -128,8 +164,9 @@ CREATE POLICY "Users can update own analyses" ON analyses
 
 -- Разрешаем RPC функцию для всех аутентифицированных пользователей
 GRANT EXECUTE ON FUNCTION increment_generation_count(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION increment_generation_limit(UUID, INTEGER) TO authenticated;
 
 -- Разрешаем доступ к таблицам для аутентифицированных пользователей
-GRANT ALL ON users TO authenticated;
-GRANT ALL ON analyses TO authenticated;
+GRANT SELECT ON users TO authenticated;
+GRANT SELECT, INSERT ON analyses TO authenticated;
 GRANT USAGE ON SEQUENCE analyses_id_seq TO authenticated;

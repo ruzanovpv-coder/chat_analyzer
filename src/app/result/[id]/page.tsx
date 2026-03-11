@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import ResultPreview from '@/components/ResultPreview'
 import LimitCounter from '@/components/LimitCounter'
@@ -14,6 +14,9 @@ export default function ResultPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const startedRef = useRef(false)
+  const paymentPollCountRef = useRef(0)
+  const searchParams = useSearchParams()
+  const paymentSuccess = searchParams.get('payment') === 'success'
 
   useEffect(() => {
     const fetchAnalysis = async () => {
@@ -48,7 +51,12 @@ export default function ResultPage() {
 
     // Polling для обновления статуса
     const interval = setInterval(async () => {
-      if (analysis?.status === 'pending' || analysis?.status === 'processing') {
+      const shouldPollStatus =
+        analysis?.status === 'pending' ||
+        analysis?.status === 'processing' ||
+        (paymentSuccess && analysis?.status === 'completed' && !analysis?.is_paid)
+
+      if (shouldPollStatus) {
         const { data } = await supabase
           .from('analyses')
           .select('*')
@@ -56,16 +64,25 @@ export default function ResultPage() {
           .single()
         
         if (data) {
+          if (paymentSuccess && analysis?.status === 'completed' && !analysis?.is_paid) {
+            paymentPollCountRef.current += 1
+            if (paymentPollCountRef.current > 40) {
+              clearInterval(interval)
+            }
+          }
+
           setAnalysis(data)
           if (data.status === 'completed' || data.status === 'failed') {
-            clearInterval(interval)
+            if (!(paymentSuccess && data.status === 'completed' && !data.is_paid)) {
+              clearInterval(interval)
+            }
           }
         }
       }
     }, 3000)
 
     return () => clearInterval(interval)
-  }, [analysisId, analysis?.status])
+  }, [analysisId, analysis?.status, analysis?.is_paid, paymentSuccess])
 
   useEffect(() => {
     const startAnalysis = async () => {
@@ -154,6 +171,7 @@ export default function ResultPage() {
               fullResult={analysis.result_text}
               isPaid={analysis.is_paid || false}
               fileName={analysis.file_name}
+              analysisId={analysisId}
             />
           )}
 

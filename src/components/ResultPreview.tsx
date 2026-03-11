@@ -7,15 +7,19 @@ interface ResultPreviewProps {
   fullResult: string | null
   isPaid: boolean
   fileName: string
+  analysisId?: string | number
 }
 
 export default function ResultPreview({ 
   teaser, 
   fullResult, 
   isPaid,
-  fileName 
+  fileName,
+  analysisId,
 }: ResultPreviewProps) {
   const [copied, setCopied] = useState(false)
+  const [paying, setPaying] = useState(false)
+  const [payError, setPayError] = useState('')
 
   const handleCopy = async () => {
     const text = isPaid && fullResult ? fullResult : teaser
@@ -35,6 +39,37 @@ export default function ResultPreview({
     link.click()
     document.body.removeChild(link)
     URL.revokeObjectURL(url)
+  }
+
+  const handlePay = async () => {
+    if (!analysisId) return
+
+    setPayError('')
+    setPaying(true)
+
+    try {
+      const res = await fetch('/api/payment/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ analysisId }),
+      })
+
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        throw new Error(data.error || 'Не удалось создать платёж')
+      }
+
+      if (data.confirmationUrl) {
+        window.location.href = data.confirmationUrl
+        return
+      }
+
+      throw new Error('Не удалось получить ссылку на оплату')
+    } catch (err: any) {
+      setPayError(err?.message || 'Ошибка оплаты')
+    } finally {
+      setPaying(false)
+    }
   }
 
   return (
@@ -78,7 +113,16 @@ export default function ResultPreview({
             <li>✓ PDF-отчёт</li>
             <li>✓ Приоритетная поддержка</li>
           </ul>
-          <button className="w-full bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 transition-colors">
+          {payError && (
+            <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+              {payError}
+            </div>
+          )}
+          <button
+            onClick={handlePay}
+            disabled={paying || !analysisId}
+            className="w-full bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 disabled:bg-gray-400 transition-colors"
+          >
             Оплатить и получить полный доступ
           </button>
         </div>

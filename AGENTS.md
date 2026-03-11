@@ -25,6 +25,10 @@ Expected keys:
 - `RESEND_API_KEY`
 - `EMAIL_FROM`
 - `NEXT_PUBLIC_APP_URL`
+- `YOOKASSA_SHOP_ID`
+- `YOOKASSA_SECRET_KEY`
+- `YOOKASSA_API_BASE_URL` (optional)
+- `YOOKASSA_WEBHOOK_TOKEN` (optional)
 
 Notes:
 - Never commit `.env.local` (only `.env.example` is tracked).
