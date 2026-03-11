@@ -1,11 +1,24 @@
 'use client'
 
+import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import FileUpload from '@/components/FileUpload'
 import LimitCounter from '@/components/LimitCounter'
+import { supabase } from '@/lib/supabase/client'
 
 export default function UploadPage() {
   const router = useRouter()
+
+  useEffect(() => {
+    const ensureAuth = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        router.push('/auth/login')
+      }
+    }
+
+    ensureAuth()
+  }, [router])
 
   const handleUploadComplete = (analysisId: string) => {
     router.push(`/result/${analysisId}`)
