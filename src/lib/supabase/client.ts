@@ -8,7 +8,13 @@ let cached: SupabaseClient | null = null
 export function getSupabaseClient(): SupabaseClient {
   if (cached) return cached
 
-  cached = createClientComponentClient()
+  const supabaseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim()
+  const supabaseKey = (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '').trim()
+
+  cached = createClientComponentClient({
+    supabaseUrl,
+    supabaseKey,
+  })
   return cached
 }
 

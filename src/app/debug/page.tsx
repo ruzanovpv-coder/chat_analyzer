@@ -9,8 +9,11 @@ function mask(value: string, start = 10, end = 6) {
 }
 
 export default function DebugPage() {
-  const supabaseUrl = useMemo(() => (process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim(), [])
-  const anonKey = useMemo(() => (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '').trim(), [])
+  const rawSupabaseUrl = useMemo(() => process.env.NEXT_PUBLIC_SUPABASE_URL || '', [])
+  const rawAnonKey = useMemo(() => process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '', [])
+
+  const supabaseUrl = useMemo(() => rawSupabaseUrl.trim(), [rawSupabaseUrl])
+  const anonKey = useMemo(() => rawAnonKey.trim(), [rawAnonKey])
   const origin = useMemo(() => (typeof window !== 'undefined' ? window.location.origin : ''), [])
 
   const [result, setResult] = useState<string>('')
@@ -26,6 +29,7 @@ export default function DebugPage() {
       }
 
       const url = `${supabaseUrl.replace(/\/+$/, '')}/auth/v1/health`
+      const tokenUrl = `${supabaseUrl.replace(/\/+$/, '')}/auth/v1/token?grant_type=password`
 
       let corsText = ''
       try {
@@ -42,6 +46,27 @@ export default function DebugPage() {
         corsText = `cors: error=${e?.name || 'Error'} message=${e?.message || String(e)}`
       }
 
+      // 1b) CORS-mode POST request (token endpoint)
+      let tokenText = ''
+      try {
+        const res = await fetch(tokenUrl, {
+          method: 'POST',
+          headers: {
+            apikey: anonKey,
+            Authorization: `Bearer ${anonKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            email: `debug+${Date.now()}@example.com`,
+            password: 'not-a-real-password',
+          }),
+          mode: 'cors',
+        })
+        tokenText = `token: status=${res.status} ok=${res.ok} type=${res.type} body=${await res.text().catch(() => '')}`
+      } catch (e: any) {
+        tokenText = `token: error=${e?.name || 'Error'} message=${e?.message || String(e)}`
+      }
+
       let noCorsText = ''
       try {
         const res = await fetch(url, {
@@ -53,7 +78,7 @@ export default function DebugPage() {
         noCorsText = `no-cors: error=${e?.name || 'Error'} message=${e?.message || String(e)}`
       }
 
-      setResult([corsText, noCorsText].join('\n'))
+      setResult([corsText, tokenText, noCorsText].join('\n'))
     } finally {
       setLoading(false)
     }
@@ -72,9 +97,15 @@ export default function DebugPage() {
 
         <div className="text-sm text-gray-600 mt-4">NEXT_PUBLIC_SUPABASE_URL</div>
         <div className="font-mono break-words">{supabaseUrl || '(empty)'}</div>
+        <div className="text-xs text-gray-500">
+          rawLen={rawSupabaseUrl.length} trimmedLen={supabaseUrl.length} changed={String(rawSupabaseUrl !== supabaseUrl)}
+        </div>
 
         <div className="text-sm text-gray-600 mt-4">NEXT_PUBLIC_SUPABASE_ANON_KEY</div>
         <div className="font-mono break-words">{mask(anonKey)}</div>
+        <div className="text-xs text-gray-500">
+          rawLen={rawAnonKey.length} trimmedLen={anonKey.length} changed={String(rawAnonKey !== anonKey)}
+        </div>
       </div>
 
       <div className="bg-white rounded-lg shadow p-6 space-y-3">
@@ -99,4 +130,3 @@ export default function DebugPage() {
     </div>
   )
 }
-
