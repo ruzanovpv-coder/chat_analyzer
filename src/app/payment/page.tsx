@@ -33,43 +33,48 @@ export default function PaymentPage() {
       setLoading(true)
       setError('')
 
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        router.push('/auth/login')
-        return
-      }
-
-      if (selectedId) {
-        const { data } = await supabase
-          .from('analyses')
-          .select('id,file_name,created_at,status,is_paid')
-          .eq('id', selectedId)
-          .eq('user_id', user.id)
-          .single()
-
-        if (data) {
-          setSelected(data as AnalysisLite)
-          setAnalyses([data as AnalysisLite])
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) {
+          router.push('/auth/login')
+          return
         }
-      } else {
-        const { data } = await supabase
-          .from('analyses')
-          .select('id,file_name,created_at,status,is_paid')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false })
-          .limit(20)
 
-        const list = (data || []) as AnalysisLite[]
-        setAnalyses(list)
+        if (selectedId) {
+          const { data } = await supabase
+            .from('analyses')
+            .select('id,file_name,created_at,status,is_paid')
+            .eq('id', selectedId)
+            .eq('user_id', user.id)
+            .single()
 
-        const firstUnpaid = list.find(a => a.status === 'completed' && !a.is_paid) || null
-        setSelected(firstUnpaid)
+          if (data) {
+            setSelected(data as AnalysisLite)
+            setAnalyses([data as AnalysisLite])
+          }
+        } else {
+          const { data } = await supabase
+            .from('analyses')
+            .select('id,file_name,created_at,status,is_paid')
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false })
+            .limit(20)
+
+          const list = (data || []) as AnalysisLite[]
+          setAnalyses(list)
+
+          const firstUnpaid = list.find(a => a.status === 'completed' && !a.is_paid) || null
+          setSelected(firstUnpaid)
+        }
+      } catch (err: any) {
+        console.error(err)
+        setError(err?.message || 'Ошибка загрузки данных')
+      } finally {
+        setLoading(false)
       }
-
-      setLoading(false)
     }
 
-    load()
+    load().catch((err) => console.error(err))
   }, [router, selectedId])
 
   const handlePay = async () => {
@@ -212,4 +217,3 @@ export default function PaymentPage() {
     </div>
   )
 }
-

@@ -12,18 +12,30 @@ export default function Navbar() {
 
   useEffect(() => {
     const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      setIsLoggedIn(!!session)
-      setLoading(false)
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        setIsLoggedIn(!!session)
+
+        const subscription = supabase.auth.onAuthStateChange((_event, session) => {
+          setIsLoggedIn(!!session)
+        })
+
+        return () => subscription.data.subscription.unsubscribe()
+      } catch (err) {
+        console.error(err)
+        setIsLoggedIn(false)
+        return () => {}
+      } finally {
+        setLoading(false)
+      }
     }
 
+    let cleanup = () => {}
     checkAuth()
+      .then((fn) => { cleanup = fn })
+      .catch((err) => { console.error(err) })
 
-    const subscription = supabase.auth.onAuthStateChange((_event, session) => {
-      setIsLoggedIn(!!session)
-    })
-
-    return () => subscription.data.subscription.unsubscribe()
+    return () => cleanup()
   }, [])
 
   const handleLogout = async () => {

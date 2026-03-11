@@ -11,13 +11,18 @@ export default function UploadPage() {
 
   useEffect(() => {
     const ensureAuth = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) {
+          router.push('/auth/login')
+        }
+      } catch (err) {
+        console.error(err)
         router.push('/auth/login')
       }
     }
 
-    ensureAuth()
+    ensureAuth().catch((err) => console.error(err))
   }, [router])
 
   const handleUploadComplete = (analysisId: string) => {

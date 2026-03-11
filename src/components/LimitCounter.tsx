@@ -10,23 +10,28 @@ export default function LimitCounter() {
 
   useEffect(() => {
     const fetchLimit = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) return
 
-      const { data } = await supabase
-        .from('users')
-        .select('generations_used, generations_limit')
-        .eq('id', user.id)
-        .single()
+        const { data } = await supabase
+          .from('users')
+          .select('generations_used, generations_limit')
+          .eq('id', user.id)
+          .single()
 
-      if (data) {
-        setUsed(data.generations_used)
-        setLimit(data.generations_limit)
+        if (data) {
+          setUsed(data.generations_used)
+          setLimit(data.generations_limit)
+        }
+      } catch (err) {
+        console.error(err)
+      } finally {
+        setLoading(false)
       }
-      setLoading(false)
     }
 
-    fetchLimit()
+    fetchLimit().catch((err) => console.error(err))
   }, [])
 
   if (loading) return null
