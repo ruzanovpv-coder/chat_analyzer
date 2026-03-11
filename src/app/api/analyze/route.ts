@@ -3,7 +3,6 @@ import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
 import { analyzeChatWithQwen } from '@/lib/qwen-api'
 import { sendAnalysisEmail } from '@/lib/email'
-import { getSupabaseAdminClient } from '@/lib/supabase/admin'
 
 export const runtime = 'nodejs'
 
@@ -17,19 +16,17 @@ function isPermissionError(message: string) {
   )
 }
 
-function isAuthKeyError(message: string) {
-  const m = message.toLowerCase()
-  return (
-    m.includes('invalid api key') ||
-    m.includes('apikey') && m.includes('invalid') ||
-    m.includes('jwt') && m.includes('invalid') ||
-    m.includes('401') ||
-    m.includes('403')
-  )
+function updatePolicyHint(message: string) {
+  if (!isPermissionError(message)) return message
+  return [
+    message,
+    'Missing UPDATE rights on `analyses` for authenticated users.',
+    'Run SQL migration: `supabase/migrations/20260311_allow_update_analyses.sql` in Supabase SQL Editor.',
+  ].join(' ')
 }
 
 export async function POST(request: NextRequest) {
-  const authSupabase = createRouteHandlerClient({ cookies })
+  const supabase = createRouteHandlerClient({ cookies })
 
   const body = await request.json().catch(() => ({}))
   const rawAnalysisId = body.analysisId as number | string | undefined
@@ -46,7 +43,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'analysisId must be a number' }, { status: 400 })
   }
 
-  const { data: { session } } = await authSupabase.auth.getSession()
+  const { data: { session } } = await supabase.auth.getSession()
   if (!session) {
     return NextResponse.json({ error: 'Требуется авторизация' }, { status: 401 })
   }
@@ -54,49 +51,17 @@ export async function POST(request: NextRequest) {
   const sessionUserId = session.user.id
   const sessionUserEmail = session.user.email ?? undefined
 
-  // Prefer admin client if configured (bypasses RLS), but fall back to the user's session client.
-  let admin: any = null
-  try {
-    admin = getSupabaseAdminClient()
-  } catch {
-    admin = null
-  }
-
-  const getWorkingClient = async () => {
-    if (!admin) return authSupabase
-
-    const { error } = await admin
-      .from('analyses')
-      .select('id')
-      .eq('id', analysisId)
-      .eq('user_id', sessionUserId)
-      .maybeSingle()
-
-    if (!error) return admin
-
-    const msg = String((error as any)?.message || error)
-    if (isAuthKeyError(msg)) {
-      // Admin key is misconfigured; fall back to session client which uses anon key + cookies.
-      return authSupabase
-    }
-
-    // Non-auth error: keep admin, we will report the real message below.
-    return admin
-  }
-
-  const supabase = await getWorkingClient()
-
   try {
     const { data: analysis, error: fetchError } = await supabase
       .from('analyses')
       .select('*')
       .eq('id', analysisId)
       .eq('user_id', sessionUserId)
-      .single()
+      .maybeSingle()
 
     if (fetchError) {
       return NextResponse.json(
-        { error: (fetchError as any)?.message || 'Ошибка чтения анализа' },
+        { error: updatePolicyHint(String((fetchError as any)?.message || fetchError)) },
         { status: 500 }
       )
     }
@@ -117,18 +82,13 @@ export async function POST(request: NextRequest) {
       .eq('user_id', sessionUserId)
       .eq('status', 'pending')
       .select('id')
-      .single()
+      .maybeSingle()
 
     if (lockError) {
-      const msg = String((lockError as any)?.message || lockError)
-      if (isPermissionError(msg)) {
-        throw new Error(
-          'Нет прав на UPDATE таблицы analyses (RLS/GRANT). Выполни миграцию, которая добавляет policy + GRANT UPDATE для authenticated.'
-        )
-      }
-      throw new Error(msg)
+      throw new Error(updatePolicyHint(String((lockError as any)?.message || lockError)))
     }
 
+    // If we didn't get the lock (0 rows), another request already started it.
     if (!locked) {
       return NextResponse.json({ success: true, status: 'processing', analysisId })
     }
@@ -156,19 +116,12 @@ export async function POST(request: NextRequest) {
       .eq('user_id', sessionUserId)
 
     if (updateError) {
-      const msg = String((updateError as any)?.message || updateError)
-      if (isPermissionError(msg)) {
-        throw new Error(
-          'Нет прав на UPDATE таблицы analyses (RLS/GRANT). Выполни миграцию, которая добавляет policy + GRANT UPDATE для authenticated.'
-        )
-      }
-      throw new Error(msg)
+      throw new Error(updatePolicyHint(String((updateError as any)?.message || updateError)))
     }
 
-    // Increase counter
     await supabase.rpc('increment_generation_count', { user_uuid: sessionUserId })
 
-    // Send email (optional; noop if no env keys)
+    // Email is optional; sendAnalysisEmail no-ops if keys are missing.
     try {
       if (sessionUserEmail) {
         await sendAnalysisEmail(sessionUserEmail, analysis.file_name, fullResult, true)
@@ -178,14 +131,12 @@ export async function POST(request: NextRequest) {
           .eq('id', analysisId)
           .eq('user_id', sessionUserId)
       }
-    } catch (emailError) {
-      console.error('Email send error:', emailError)
+    } catch {
+      // ignore email errors
     }
 
     return NextResponse.json({ success: true, analysisId })
   } catch (error: any) {
-    console.error('Analysis error:', error)
-
     try {
       await supabase
         .from('analyses')
@@ -196,6 +147,10 @@ export async function POST(request: NextRequest) {
       // ignore
     }
 
-    return NextResponse.json({ error: error?.message || 'Ошибка анализа' }, { status: 500 })
+    return NextResponse.json(
+      { error: updatePolicyHint(String(error?.message || 'Ошибка анализа')) },
+      { status: 500 }
+    )
   }
 }
+
