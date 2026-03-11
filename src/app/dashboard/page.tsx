@@ -37,6 +37,13 @@ export default function DashboardPage() {
     }
 
     fetchAnalyses()
+
+    // Keep refreshing while user is on the page so pending/processing items update.
+    const interval = setInterval(() => {
+      fetchAnalyses().catch(() => null)
+    }, 5000)
+
+    return () => clearInterval(interval)
   }, [router])
 
   const getStatusColor = (status: string) => {
@@ -112,6 +119,14 @@ export default function DashboardPage() {
                           <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(analysis.status)}`}>
                             {getStatusText(analysis.status)}
                           </span>
+                          {analysis.status !== 'completed' && (
+                            <Link
+                              href={`/result/${analysis.id}`}
+                              className="text-blue-600 hover:text-blue-800 font-medium"
+                            >
+                              Open
+                            </Link>
+                          )}
                           {analysis.status === 'completed' && (
                             <Link
                               href={`/result/${analysis.id}`}
