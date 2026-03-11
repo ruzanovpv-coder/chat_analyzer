@@ -5,8 +5,8 @@ let cached: SupabaseClient | null = null
 export function getSupabaseAdminClient(): SupabaseClient {
   if (cached) return cached
 
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  const url = (process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim()
+  const serviceRoleKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim()
 
   if (!url || !serviceRoleKey) {
     throw new Error('Missing Supabase env vars: NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY')
@@ -15,4 +15,3 @@ export function getSupabaseAdminClient(): SupabaseClient {
   cached = createClient(url, serviceRoleKey)
   return cached
 }
-

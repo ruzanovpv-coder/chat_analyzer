@@ -13,6 +13,8 @@ export default function ResultPage() {
   const [analysis, setAnalysis] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [startError, setStartError] = useState('')
+  const [startLoading, setStartLoading] = useState(false)
   const startedRef = useRef(false)
   const paymentPollCountRef = useRef(0)
   const searchParams = useSearchParams()
@@ -90,6 +92,8 @@ export default function ResultPage() {
       if (analysis.status !== 'pending') return
 
       startedRef.current = true
+      setStartError('')
+      setStartLoading(true)
 
       try {
         const res = await fetch('/api/analyze', {
@@ -98,12 +102,16 @@ export default function ResultPage() {
           body: JSON.stringify({ analysisId }),
         })
 
+        setStartLoading(false)
+
         if (!res.ok) {
           const data = await res.json().catch(() => ({}))
           throw new Error(data.error || 'Не удалось запустить анализ')
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error('Start analysis error:', err)
+        setStartError(String(err?.message || err))
+        setStartLoading(false)
         startedRef.current = false
       }
     }
@@ -139,6 +147,15 @@ export default function ResultPage() {
         <div className="md:col-span-2 space-y-6">
           {analysis.status === 'pending' && (
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 text-center">
+              {startError ? (
+                <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded text-left">
+                  <div className="font-semibold">Ошибка запуска анализа</div>
+                  <div className="mt-1 break-words">{startError}</div>
+                  <div className="mt-2 text-sm">
+                    Если ошибка про RLS/UPDATE — выполни SQL из `supabase/migrations/20260311_allow_update_analyses.sql` в Supabase SQL Editor.
+                  </div>
+                </div>
+              ) : null}
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
               <h3 className="text-lg font-semibold text-blue-900 mb-2">
                 Файл загружается...
