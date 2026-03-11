@@ -139,7 +139,7 @@ function prepareChatForModel(chatText: string) {
       lines.push(`${date} ${from}: ${safeText}`)
     }
 
-    const topParticipants = [...participants.entries()]
+    const topParticipants = Array.from(participants.entries())
       .sort((a, b) => b[1] - a[1])
       .slice(0, 6)
       .map(([name, count]) => `${name} (${count})`)
@@ -235,4 +235,3 @@ export async function analyzeChatWithOpenAI(chatText: string): Promise<{
   // Free mode: return full text everywhere.
   return { fullResult, teaser: fullResult }
 }
-
