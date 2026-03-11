@@ -82,12 +82,8 @@ export async function POST(request: NextRequest) {
 
     if (insertError) throw insertError
 
-    // Запуск анализа (асинхронно)
-    fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/analyze`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ analysisId: analysis.id }),
-    })
+    // Анализ запускается на странице результата (/result/[id]), чтобы запрос шёл
+    // с пользовательской сессией (cookies) и не обрывался после ответа.
 
     return NextResponse.json({ 
       success: true, 

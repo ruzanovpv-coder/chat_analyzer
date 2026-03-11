@@ -21,7 +21,7 @@ export default function ConfirmPage() {
           <p className="text-sm text-blue-800">
             <strong>Не получили письмо?</strong>
             <br />
-            • Проверьте папку "Спам"
+            • Проверьте папку &quot;Спам&quot;
             <br />
             • Убедитесь, что email указан правильно
           </p>

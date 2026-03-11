@@ -38,9 +38,9 @@ export default function UploadPage() {
         <ol className="list-decimal list-inside space-y-2 text-blue-800">
           <li>Откройте чат в Telegram Desktop</li>
           <li>Нажмите на три точки (⋮) в правом верхнем углу</li>
-          <li>Выберите "Экспорт истории чата"</li>
-          <li>Выберите формат "JSON" или "TXT"</li>
-          <li>Нажмите "Экспортировать"</li>
+          <li>Выберите &quot;Экспорт истории чата&quot;</li>
+          <li>Выберите формат &quot;JSON&quot; или &quot;TXT&quot;</li>
+          <li>Нажмите &quot;Экспортировать&quot;</li>
           <li>Загрузите полученный файл выше</li>
         </ol>
       </div>

@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
+import { supabase } from '@/lib/supabase/client'
 import ResultPreview from '@/components/ResultPreview'
 import LimitCounter from '@/components/LimitCounter'
 
@@ -13,6 +13,7 @@ export default function ResultPage() {
   const [analysis, setAnalysis] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const startedRef = useRef(false)
 
   useEffect(() => {
     const fetchAnalysis = async () => {
@@ -65,6 +66,33 @@ export default function ResultPage() {
 
     return () => clearInterval(interval)
   }, [analysisId, analysis?.status])
+
+  useEffect(() => {
+    const startAnalysis = async () => {
+      if (!analysis || startedRef.current) return
+      if (analysis.status !== 'pending') return
+
+      startedRef.current = true
+
+      try {
+        const res = await fetch('/api/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ analysisId }),
+        })
+
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}))
+          throw new Error(data.error || 'Не удалось запустить анализ')
+        }
+      } catch (err) {
+        console.error('Start analysis error:', err)
+        startedRef.current = false
+      }
+    }
+
+    startAnalysis()
+  }, [analysis, analysisId])
 
   if (loading) {
     return (

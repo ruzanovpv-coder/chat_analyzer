@@ -11,6 +11,22 @@ CREATE TABLE IF NOT EXISTS users (
   PRIMARY KEY (id)
 );
 
+-- Автосоздание строки в public.users при регистрации в auth.users
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.users (id, email)
+  VALUES (NEW.id, NEW.email)
+  ON CONFLICT (id) DO NOTHING;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
 -- Таблица анализов
 CREATE TABLE IF NOT EXISTS analyses (
   id SERIAL PRIMARY KEY,
@@ -65,21 +81,50 @@ CREATE INDEX IF NOT EXISTS idx_analyses_user_id ON analyses(user_id);
 CREATE INDEX IF NOT EXISTS idx_analyses_status ON analyses(status);
 CREATE INDEX IF NOT EXISTS idx_analyses_created_at ON analyses(created_at);
 
+-- Row Level Security (RLS)
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE analyses ENABLE ROW LEVEL SECURITY;
+
+-- Policies (drop old if present)
+DROP POLICY IF EXISTS "Users can read own data" ON users;
+DROP POLICY IF EXISTS "Users can read own analyses" ON analyses;
+DROP POLICY IF EXISTS "Users can create analyses" ON analyses;
+DROP POLICY IF EXISTS "Users can update own analyses" ON analyses;
+
+DROP POLICY IF EXISTS "Users can select own data" ON users;
+DROP POLICY IF EXISTS "Users can update own data" ON users;
+DROP POLICY IF EXISTS "Users can select own analyses" ON analyses;
+DROP POLICY IF EXISTS "Users can insert own analyses" ON analyses;
+
+CREATE POLICY "Users can select own data" ON users
+  FOR SELECT TO authenticated
+  USING (auth.uid() = id);
+
+CREATE POLICY "Users can update own data" ON users
+  FOR UPDATE TO authenticated
+  USING (auth.uid() = id)
+  WITH CHECK (auth.uid() = id);
+
+CREATE POLICY "Users can select own analyses" ON analyses
+  FOR SELECT TO authenticated
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own analyses" ON analyses
+  FOR INSERT TO authenticated
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own analyses" ON analyses
+  FOR UPDATE TO authenticated
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
 -- Политики доступа для Supabase
 -- Пользователи могут читать только свои данные
-CREATE POLICY "Users can read own data" ON users
-  FOR ALL USING (auth.uid() = id);
 
-CREATE POLICY "Users can read own analyses" ON analyses
-  FOR ALL USING (auth.uid() = user_id);
 
 -- Пользователи могут создавать новые анализы
-CREATE POLICY "Users can create analyses" ON analyses
-  FOR INSERT WITH CHECK (auth.uid() = user_id);
 
 -- Пользователи могут обновлять только свои анализы (но не результаты)
-CREATE POLICY "Users can update own analyses" ON analyses
-  FOR UPDATE USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
 -- Разрешаем RPC функцию для всех аутентифицированных пользователей
 GRANT EXECUTE ON FUNCTION increment_generation_count(UUID) TO authenticated;
