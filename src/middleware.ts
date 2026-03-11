@@ -6,6 +6,11 @@ export async function middleware(req: NextRequest) {
   const res = NextResponse.next()
   const supabase = createMiddlewareClient({ req, res })
   
+  // Webhooks должны быть доступны без сессии
+  if (req.nextUrl.pathname.startsWith('/api/payment/webhook')) {
+    return res
+  }
+
   const { data: { session } } = await supabase.auth.getSession()
   
   // Защищённые роуты

@@ -5,6 +5,8 @@ import { cookies } from 'next/headers'
 import { analyzeChatWithQwen } from '@/lib/qwen-api'
 import { sendAnalysisEmail } from '@/lib/email'
 
+export const runtime = 'nodejs'
+
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
