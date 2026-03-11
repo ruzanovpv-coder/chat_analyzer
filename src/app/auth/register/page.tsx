@@ -45,7 +45,12 @@ export default function RegisterPage() {
 
       router.push('/auth/confirm')
     } catch (err: any) {
-      setError(err.message)
+      const msg = String(err?.message || '')
+      if (msg === 'Failed to fetch') {
+        setError('Не удалось подключиться к Supabase. Проверь CORS/Allowed Origins в настройках Supabase и правильность NEXT_PUBLIC_SUPABASE_URL/NEXT_PUBLIC_SUPABASE_ANON_KEY в Vercel.')
+      } else {
+        setError(msg)
+      }
     } finally {
       setLoading(false)
     }
