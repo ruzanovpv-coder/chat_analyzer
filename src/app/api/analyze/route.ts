@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
-import { analyzeChatWithQwen } from '@/lib/qwen-api'
+import { analyzeChatWithOpenAI } from '@/lib/openai-analysis'
 import { sendAnalysisEmail } from '@/lib/email'
 
 export const runtime = 'nodejs'
@@ -102,7 +102,7 @@ export async function POST(request: NextRequest) {
     }
 
     const fileText = await fileData.text()
-    const { fullResult, teaser } = await analyzeChatWithQwen(fileText)
+    const { fullResult, teaser } = await analyzeChatWithOpenAI(fileText)
 
     const { error: updateError } = await supabase
       .from('analyses')
@@ -153,4 +153,3 @@ export async function POST(request: NextRequest) {
     )
   }
 }
-
