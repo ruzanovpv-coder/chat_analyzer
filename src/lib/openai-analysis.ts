@@ -3,7 +3,7 @@ import * as path from 'path'
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY
 const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-5-mini'
-const OPENAI_API_URL = process.env.OPENAI_API_URL || 'https://api.openai.com/v1/responses'
+const OPENAI_API_URL = process.env.OPENAI_API_URL || 'https://api.openai.com/v1/chat/completions'
 
 function localFallbackAnalysis(chatText: string) {
   const text = String(chatText || '')
