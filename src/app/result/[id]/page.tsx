@@ -169,9 +169,7 @@ export default function ResultPage() {
             <ResultPreview
               teaser={analysis.result_teaser || ''}
               fullResult={analysis.result_text}
-              isPaid={analysis.is_paid || false}
               fileName={analysis.file_name}
-              analysisId={analysisId}
             />
           )}
 

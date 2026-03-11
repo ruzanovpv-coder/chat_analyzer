@@ -65,7 +65,7 @@ export default function LimitCounter() {
             ⚠️ Лимит исчерпан
           </p>
           <p className="text-sm text-red-600 mt-1">
-            Следующий анализ стоит 250₽
+            Сейчас доступно 2 бесплатных анализа на аккаунт.
           </p>
         </div>
       ) : (

@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS users (
   id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   email VARCHAR(255) UNIQUE NOT NULL,
   generations_used INTEGER DEFAULT 0,
-  generations_limit INTEGER DEFAULT 1,
+  generations_limit INTEGER DEFAULT 2,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   PRIMARY KEY (id)
@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS analyses (
   status VARCHAR(50) DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
   result_text TEXT,
   result_teaser TEXT,
-  is_paid BOOLEAN DEFAULT FALSE,
+  is_paid BOOLEAN DEFAULT TRUE,
   paid_at TIMESTAMP WITH TIME ZONE,
   yookassa_payment_id TEXT,
   yookassa_payment_status TEXT,

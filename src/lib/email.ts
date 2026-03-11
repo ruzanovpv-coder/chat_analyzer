@@ -1,13 +1,18 @@
 import nodemailer from 'nodemailer'
 
-const transporter = nodemailer.createTransport({
-  host: 'smtp.resend.com',
-  port: 587,
-  auth: {
-    user: 'resend',
-    pass: process.env.RESEND_API_KEY
-  }
-})
+function getTransporter() {
+  const key = process.env.RESEND_API_KEY
+  if (!key) return null
+
+  return nodemailer.createTransport({
+    host: 'smtp.resend.com',
+    port: 587,
+    auth: {
+      user: 'resend',
+      pass: key,
+    },
+  })
+}
 
 export async function sendAnalysisEmail(
   to: string,
@@ -15,6 +20,12 @@ export async function sendAnalysisEmail(
   result: string,
   isPaid: boolean
 ) {
+  const transporter = getTransporter()
+  if (!transporter) return
+
+  const from = process.env.EMAIL_FROM
+  if (!from) return
+
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
   
   const subject = isPaid 
@@ -100,7 +111,7 @@ export async function sendAnalysisEmail(
   `
 
   await transporter.sendMail({
-    from: process.env.EMAIL_FROM || 'Chat Analyzer <noreply@chat-analyzer.ru>',
+    from,
     to,
     subject,
     html,

@@ -83,6 +83,7 @@ export async function POST(request: NextRequest) {
         status: 'completed',
         result_text: fullResult,
         result_teaser: teaser,
+        is_paid: true,
       })
       .eq('id', analysisId)
 
@@ -96,8 +97,8 @@ export async function POST(request: NextRequest) {
         await sendAnalysisEmail(
           recipient,
           analysis.file_name,
-          teaser,
-          false // пока не оплачено
+          fullResult,
+          true // free mode
         )
 
         await supabase

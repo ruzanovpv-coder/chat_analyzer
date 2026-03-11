@@ -78,6 +78,7 @@ export async function POST(request: NextRequest) {
         file_size: file.size,
         file_path: filePath,
         status: 'pending',
+        is_paid: true,
       })
       .select()
       .single()
