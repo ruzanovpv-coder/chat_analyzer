@@ -1,9 +1,9 @@
 import * as fs from 'fs/promises'
 import * as path from 'path'
 
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY
-const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini'
-const OPENAI_API_URL = process.env.OPENAI_API_URL || 'https://api.openai.com/v1/chat/completions'
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash'
+const GEMINI_API_URL = process.env.GEMINI_API_URL || 'https://generativelanguage.googleapis.com/v1beta/models'
 
 function localFallbackAnalysis(chatText: string) {
   const text = String(chatText || '')
@@ -41,13 +41,13 @@ function localFallbackAnalysis(chatText: string) {
   }
 
   return (
-    `AI analysis is not configured (missing OPENAI_API_KEY).` +
+    `AI analysis is not configured (missing GEMINI_API_KEY).` +
     `\n\nQuick file stats:` +
     `\n- chars: ${chars}` +
     `\n- words: ${words}` +
     `\n- lines: ${lines}` +
     jsonInfo +
-    `\n\nTo enable full analysis, add OPENAI_API_KEY in Vercel Environment Variables and redeploy.`
+    `\n\nTo enable full analysis, add GEMINI_API_KEY in Vercel Environment Variables and redeploy.`
   )
 }
 
@@ -170,39 +170,15 @@ async function readPrompt() {
   try {
     return await fs.readFile(promptPath, 'utf-8')
   } catch {
-    return 'You are an expert in chat analysis. Analyze the conversation and return a structured result.'
+    return 'You are an expert in chat analysis. Analyze the conversation and return a structured result in Russian.'
   }
 }
 
-function extractOutputText(data: any): string {
-  // Classic Chat Completions API format
-  const classicOutput = data?.choices?.[0]?.message?.content
-  if (classicOutput && typeof classicOutput === 'string') {
-    return classicOutput.trim()
-  }
-
-  // New Responses API format
-  const direct = typeof data?.output_text === 'string' ? data?.output_text : ''
-  if (direct && direct.trim()) return direct.trim()
-
-  const output = Array.isArray(data?.output) ? data.output : []
-  const parts: string[] = []
-  for (const item of output) {
-    if (item?.type !== 'message') continue
-    if (item?.role !== 'assistant') continue
-    const content = Array.isArray(item?.content) ? item.content : []
-    for (const c of content) {
-      if (c?.type === 'output_text' && typeof c?.text === 'string') parts.push(c.text)
-    }
-  }
-  return parts.join('\n').trim()
-}
-
-export async function analyzeChatWithOpenAI(chatText: string): Promise<{
+export async function analyzeChatWithGemini(chatText: string): Promise<{
   fullResult: string
   teaser: string
 }> {
-  if (!OPENAI_API_KEY) {
+  if (!GEMINI_API_KEY) {
     const fullResult = localFallbackAnalysis(chatText)
     return { fullResult, teaser: fullResult }
   }
@@ -212,35 +188,41 @@ export async function analyzeChatWithOpenAI(chatText: string): Promise<{
 
   const userContent = `${prepared.meta}\n\nChat sample:\n${prepared.content}`
 
+  const url = `${GEMINI_API_URL}/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`
+
   try {
-    const response = await fetch(OPENAI_API_URL, {
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: OPENAI_MODEL,
-        messages: [
-          { role: 'system', content: prompt },
-          { role: 'user', content: userContent },
+        contents: [
+          {
+            parts: [
+              { text: prompt },
+              { text: userContent }
+            ]
+          }
         ],
-        temperature: 0.2,
-        max_tokens: 4000,
+        generationConfig: {
+          temperature: 0.2,
+          maxOutputTokens: 4000,
+        }
       }),
     })
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => '')
-      throw new Error(`OpenAI API error: ${response.status} - ${errorText}`)
+      throw new Error(`Gemini API error: ${response.status} - ${errorText}`)
     }
 
-    const data: any = await response.json().catch(() => ({}))
-    const fullResult = extractOutputText(data) || 'No analysis output'
+    const data: any = await response.json().catch(() => {})
+    const fullResult = data?.candidates?.[0]?.content?.parts?.[0]?.text || 'No analysis output'
 
     return { fullResult, teaser: fullResult }
   } catch (error: any) {
-    console.error('OpenAI API error:', error)
+    console.error('Gemini API error:', error)
     throw error
   }
 }

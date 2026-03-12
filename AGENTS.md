@@ -22,6 +22,8 @@ Expected keys:
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `QWEN_API_KEY`
 - `QWEN_API_URL`
+- `GEMINI_API_KEY` (optional alternative to Qwen)
+- `GEMINI_MODEL` (optional, default: gemini-2.0-flash)
 - `RESEND_API_KEY`
 - `EMAIL_FROM`
 - `NEXT_PUBLIC_APP_URL`
