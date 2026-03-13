@@ -1,34 +1,70 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
-import { analyzeChatWithOpenAI } from '@/lib/openai-analysis'
+import { createClient } from '@supabase/supabase-js'
+import { analyzeChatWithGemini } from '@/lib/gemini-api'
 import { analyzeChatWithCohere } from '@/lib/cohere-api'
+import { analyzeChatWithQwen } from '@/lib/qwen-api'
 import { sendAnalysisEmail } from '@/lib/email'
 
 export const runtime = 'nodejs'
 
-function isPermissionError(message: string) {
-  const m = message.toLowerCase()
-  return (
-    m.includes('permission denied') ||
-    m.includes('row-level security') ||
-    m.includes('violates row-level security') ||
-    m.includes('rls')
-  )
-}
+/**
+ * Get authenticated user ID using JWT token from Authorization header
+ */
+async function getAuthenticatedUserId(
+  request: NextRequest
+): Promise<string | null> {
+  const authHeader = request.headers.get('authorization')
+  if (!authHeader?.startsWith('Bearer ')) {
+    return null
+  }
 
-function updatePolicyHint(message: string) {
-  if (!isPermissionError(message)) return message
-  return [
-    message,
-    'Missing UPDATE rights on `analyses` for authenticated users.',
-    'Run SQL migration: `supabase/migrations/20260311_allow_update_analyses.sql` in Supabase SQL Editor.',
-  ].join(' ')
+  const token = authHeader.slice(7)
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  if (!supabaseUrl) {
+    return null
+  }
+
+  // Try with Service Role Key first
+  if (serviceRoleKey) {
+    try {
+      const adminClient = createClient(supabaseUrl, serviceRoleKey, {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      })
+
+      const { data: { user }, error } = await adminClient.auth.getUser(token)
+      if (user?.id && !error) {
+        console.log('[Auth] JWT token auth successful with Service Role Key')
+        return user.id
+      }
+    } catch (err) {
+      console.warn('[Auth] Service Role Key auth failed, trying anon key:', err)
+    }
+  }
+
+  // Fallback to anon key
+  if (anonKey) {
+    try {
+      const client = createClient(supabaseUrl, anonKey)
+      const { data: { user }, error } = await client.auth.getUser(token)
+      if (user?.id && !error) {
+        console.log('[Auth] JWT token auth successful with anon key')
+        return user.id
+      }
+    } catch (err) {
+      console.warn('[Auth] Anon key auth failed:', err)
+    }
+  }
+
+  return null
 }
 
 export async function POST(request: NextRequest) {
-  const supabase = createRouteHandlerClient({ cookies })
-
   const body = await request.json().catch(() => ({}))
   const rawAnalysisId = body.analysisId as number | string | undefined
   if (!rawAnalysisId) {
@@ -44,16 +80,49 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'analysisId must be a number' }, { status: 400 })
   }
 
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session) {
-    return NextResponse.json({ error: 'Требуется авторизация' }, { status: 401 })
+  // Get authenticated user ID
+  const sessionUserId = await getAuthenticatedUserId(request)
+  if (!sessionUserId) {
+    return NextResponse.json(
+      { error: 'Требуется авторизация' },
+      { status: 401 }
+    )
   }
 
-  const sessionUserId = session.user.id
-  const sessionUserEmail = session.user.email ?? undefined
+  let sessionUserEmail: string | undefined = undefined
 
   try {
-    const { data: analysis, error: fetchError } = await supabase
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+    if (!supabaseUrl || !anonKey) {
+      return NextResponse.json(
+        { error: 'Конфигурация сервера неполная' },
+        { status: 500 }
+      )
+    }
+
+    const dbClient = serviceRoleKey
+      ? createClient(supabaseUrl, serviceRoleKey, {
+          auth: { autoRefreshToken: false, persistSession: false },
+        })
+      : createClient(supabaseUrl, anonKey, {
+          auth: { autoRefreshToken: false, persistSession: false },
+        })
+
+    // Get user email
+    if (serviceRoleKey) {
+      try {
+        const { data: { user } } = await dbClient.auth.admin.getUserById(sessionUserId)
+        sessionUserEmail = user?.email
+      } catch {
+        // Email is optional
+      }
+    }
+
+    // Fetch analysis
+    const { data: analysis, error: fetchError } = await dbClient
       .from('analyses')
       .select('*')
       .eq('id', analysisId)
@@ -61,10 +130,8 @@ export async function POST(request: NextRequest) {
       .maybeSingle()
 
     if (fetchError) {
-      return NextResponse.json(
-        { error: updatePolicyHint(String((fetchError as any)?.message || fetchError)) },
-        { status: 500 }
-      )
+      console.error('Fetch error:', fetchError)
+      return NextResponse.json({ error: 'Ошибка при получении анализа' }, { status: 500 })
     }
 
     if (!analysis) {
@@ -75,8 +142,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, status: analysis.status, analysisId })
     }
 
-    // Atomically lock: pending -> processing
-    const { data: locked, error: lockError } = await supabase
+    // Lock analysis
+    const { data: locked, error: lockError } = await dbClient
       .from('analyses')
       .update({ status: 'processing' })
       .eq('id', analysisId)
@@ -86,41 +153,57 @@ export async function POST(request: NextRequest) {
       .maybeSingle()
 
     if (lockError) {
-      throw new Error(updatePolicyHint(String((lockError as any)?.message || lockError)))
+      console.error('Lock error:', lockError)
+      throw new Error('Не удалось заблокировать анализ')
     }
 
-    // If we didn't get the lock (0 rows), another request already started it.
     if (!locked) {
       return NextResponse.json({ success: true, status: 'processing', analysisId })
     }
 
-    const { data: fileData, error: downloadError } = await supabase.storage
+    // Download file
+    console.log('[Analyze] Downloading file:', analysis.file_path)
+    const { data: fileData, error: downloadError } = await dbClient.storage
       .from('chat-files')
       .download(analysis.file_path)
 
     if (downloadError || !fileData) {
-      throw new Error('Не удалось скачать файл из Storage')
+      console.error('[Analyze] Download error:', downloadError)
+      throw new Error('Не удалось скачать файл')
     }
 
     const fileText = await fileData.text()
-    
-    // Try OpenAI first, fallback to Cohere if it fails
+    console.log('[Analyze] File size:', fileText.length)
+
+    // Try AI providers: Gemini → Cohere → Qwen
     let analysisResult
     try {
-      analysisResult = await analyzeChatWithOpenAI(fileText)
-    } catch (openAiError) {
-      console.warn('OpenAI analysis failed, trying Cohere:', openAiError.message)
+      console.log('[Analyze] Trying Gemini')
+      analysisResult = await analyzeChatWithGemini(fileText)
+      console.log('[Analyze] Gemini success')
+    } catch (geminiError) {
+      console.warn('[Analyze] Gemini failed:', geminiError)
       try {
+        console.log('[Analyze] Trying Cohere')
         analysisResult = await analyzeChatWithCohere(fileText)
+        console.log('[Analyze] Cohere success')
       } catch (cohereError) {
-        console.error('Both OpenAI and Cohere failed:', cohereError.message)
-        throw new Error('Не удалось проанализировать чат ни одним из доступных AI-провайдеров')
+        console.warn('[Analyze] Cohere failed:', cohereError)
+        try {
+          console.log('[Analyze] Trying Qwen')
+          analysisResult = await analyzeChatWithQwen(fileText)
+          console.log('[Analyze] Qwen success')
+        } catch (qwenError) {
+          console.error('[Analyze] All providers failed:', qwenError)
+          throw new Error('Не удалось проанализировать чат')
+        }
       }
     }
-    
+
     const { fullResult, teaser } = analysisResult
 
-    const { error: updateError } = await supabase
+    // Update database
+    const { error: updateError } = await dbClient
       .from('analyses')
       .update({
         status: 'completed',
@@ -132,39 +215,57 @@ export async function POST(request: NextRequest) {
       .eq('user_id', sessionUserId)
 
     if (updateError) {
-      throw new Error(updatePolicyHint(String((updateError as any)?.message || updateError)))
+      console.error('Update error:', updateError)
+      throw new Error('Не удалось сохранить результаты')
     }
 
-    await supabase.rpc('increment_generation_count', { user_uuid: sessionUserId })
+    // Increment counter
+    await dbClient.rpc('increment_generation_count', { user_uuid: sessionUserId })
 
-    // Email is optional; sendAnalysisEmail no-ops if keys are missing.
+    // Send email
     try {
       if (sessionUserEmail) {
         await sendAnalysisEmail(sessionUserEmail, analysis.file_name, fullResult, true)
-        await supabase
+        await dbClient
           .from('analyses')
           .update({ email_sent: true, email_sent_at: new Date().toISOString() })
           .eq('id', analysisId)
           .eq('user_id', sessionUserId)
       }
-    } catch {
-      // ignore email errors
+    } catch (emailErr) {
+      console.warn('Email error:', emailErr)
     }
 
     return NextResponse.json({ success: true, analysisId })
   } catch (error: any) {
+    console.error('Analysis error:', error)
+
     try {
-      await supabase
-        .from('analyses')
-        .update({ status: 'failed' })
-        .eq('id', analysisId)
-        .eq('user_id', sessionUserId)
-    } catch {
-      // ignore
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+      const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+      const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+      if (supabaseUrl && anonKey) {
+        const dbClient = serviceRoleKey
+          ? createClient(supabaseUrl, serviceRoleKey, {
+              auth: { autoRefreshToken: false, persistSession: false },
+            })
+          : createClient(supabaseUrl, anonKey, {
+              auth: { autoRefreshToken: false, persistSession: false },
+            })
+
+        await dbClient
+          .from('analyses')
+          .update({ status: 'failed' })
+          .eq('id', analysisId)
+          .eq('user_id', sessionUserId)
+      }
+    } catch (updateErr) {
+      console.error('Failed to update status:', updateErr)
     }
 
     return NextResponse.json(
-      { error: updatePolicyHint(String(error?.message || 'Ошибка анализа')) },
+      { error: error?.message || 'Ошибка анализа' },
       { status: 500 }
     )
   }

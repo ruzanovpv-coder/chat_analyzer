@@ -96,9 +96,22 @@ export default function ResultPage() {
       setStartLoading(true)
 
       try {
+        // Get JWT token from Supabase session
+        const { data: { session } } = await supabase.auth.getSession()
+        const token = session?.access_token
+
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+        }
+
+        // Add JWT token to Authorization header if available
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`
+        }
+
         const res = await fetch('/api/analyze', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
           body: JSON.stringify({ analysisId }),
           credentials: 'include',
         })
