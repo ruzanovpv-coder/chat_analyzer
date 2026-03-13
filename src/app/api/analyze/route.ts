@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
 import { analyzeChatWithGemini } from '@/lib/gemini-api'
+import { analyzeChatWithClaude } from '@/lib/claude-api'
 import { analyzeChatWithCohere } from '@/lib/cohere-api'
 import { analyzeChatWithQwen } from '@/lib/qwen-api'
 import { sendAnalysisEmail } from '@/lib/email'
@@ -191,14 +192,21 @@ export async function POST(request: NextRequest) {
     } catch (e: any) {
       console.warn('[POST] Gemini failed:', e?.message)
       try {
-        console.log('[POST] Trying Cohere...')
-        analysisResult = await analyzeChatWithCohere(fileText)
-        console.log('[POST] Cohere success')
+        console.log('[POST] Trying Claude...')
+        analysisResult = await analyzeChatWithClaude(fileText)
+        console.log('[POST] Claude success')
       } catch (e2: any) {
-        console.warn('[POST] Cohere failed:', e2?.message)
-        console.log('[POST] Trying Qwen...')
-        analysisResult = await analyzeChatWithQwen(fileText)
-        console.log('[POST] Qwen success')
+        console.warn('[POST] Claude failed:', e2?.message)
+        try {
+          console.log('[POST] Trying Cohere...')
+          analysisResult = await analyzeChatWithCohere(fileText)
+          console.log('[POST] Cohere success')
+        } catch (e3: any) {
+          console.warn('[POST] Cohere failed:', e3?.message)
+          console.log('[POST] Trying Qwen...')
+          analysisResult = await analyzeChatWithQwen(fileText)
+          console.log('[POST] Qwen success')
+        }
       }
     }
 
