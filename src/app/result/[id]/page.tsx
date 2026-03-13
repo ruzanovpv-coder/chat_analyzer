@@ -100,6 +100,7 @@ export default function ResultPage() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ analysisId }),
+          credentials: 'include',
         })
 
         setStartLoading(false)

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
 import { analyzeChatWithOpenAI } from '@/lib/openai-analysis'
+import { analyzeChatWithCohere } from '@/lib/cohere-api'
 import { sendAnalysisEmail } from '@/lib/email'
 
 export const runtime = 'nodejs'
@@ -102,7 +103,22 @@ export async function POST(request: NextRequest) {
     }
 
     const fileText = await fileData.text()
-    const { fullResult, teaser } = await analyzeChatWithOpenAI(fileText)
+    
+    // Try OpenAI first, fallback to Cohere if it fails
+    let analysisResult
+    try {
+      analysisResult = await analyzeChatWithOpenAI(fileText)
+    } catch (openAiError) {
+      console.warn('OpenAI analysis failed, trying Cohere:', openAiError.message)
+      try {
+        analysisResult = await analyzeChatWithCohere(fileText)
+      } catch (cohereError) {
+        console.error('Both OpenAI and Cohere failed:', cohereError.message)
+        throw new Error('Не удалось проанализировать чат ни одним из доступных AI-провайдеров')
+      }
+    }
+    
+    const { fullResult, teaser } = analysisResult
 
     const { error: updateError } = await supabase
       .from('analyses')
