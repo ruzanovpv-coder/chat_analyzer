@@ -10,12 +10,13 @@ export async function GET(request: NextRequest) {
     }
 
     const count = await getUserGenerationCount(userId)
-    const canGenerate = count < 1
+    const limit = 10
+    const canGenerate = count < limit
 
     return NextResponse.json({ 
       canGenerate,
       generationCount: count,
-      limit: 1
+      limit
     })
   } catch (error: any) {
     console.error('[CheckLimit] Error:', error.message)
