@@ -34,6 +34,25 @@ ${chatText}
 }
 
 export async function analyzeChat(chatText: string): Promise<AnalysisResult> {
+  // Try Cohere first (most reliable)
+  try {
+    const { CohereClient } = await import('cohere-ai')
+    const apiKey = process.env.COHERE_API_KEY
+    if (apiKey) {
+      const cohere = new CohereClient({ token: apiKey })
+      const response = await cohere.generate({
+        prompt: `Проанализируй этот чат и дай подробный анализ:\n\n${chatText}\n\nВерни результат в формате JSON:\n{\n  "fullResult": "полный детальный анализ",\n  "teaser": "краткое превью (2-3 предложения)"\n}`,
+        maxTokens: 2000
+      })
+      const text = response.generations[0].text
+      const jsonMatch = text.match(/\{[\s\S]*\}/)
+      if (jsonMatch) return JSON.parse(jsonMatch[0])
+    }
+  } catch (e: any) {
+    console.warn('Cohere failed:', e.message)
+  }
+
+  // Fallback to Gemini
   try {
     return await analyzeWithGemini(chatText)
   } catch (error: any) {
