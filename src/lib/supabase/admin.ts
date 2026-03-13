@@ -1,17 +1,10 @@
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { createClient } from '@supabase/supabase-js'
 
-let cached: SupabaseClient | null = null
-
-export function getSupabaseAdminClient(): SupabaseClient {
-  if (cached) return cached
-
-  const url = (process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim()
-  const serviceRoleKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim()
-
-  if (!url || !serviceRoleKey) {
-    throw new Error('Missing Supabase env vars: NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY')
-  }
-
-  cached = createClient(url, serviceRoleKey)
-  return cached
+export function createAdminClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+  
+  return createClient(supabaseUrl, supabaseServiceKey, {
+    auth: { autoRefreshToken: false, persistSession: false }
+  })
 }

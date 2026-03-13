@@ -1,40 +1,24 @@
-import { NextResponse } from 'next/server'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
+import { NextRequest, NextResponse } from 'next/server'
+import { getUserIdFromSession } from '@/lib/supabase'
+import { getUserGenerationCount } from '@/lib/database'
 
-export const runtime = 'nodejs'
-
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
-    
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) {
-      return NextResponse.json({ allowed: false, error: 'Требуется авторизация' }, { status: 401 })
+    const userId = await getUserIdFromSession()
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { data } = await supabase
-      .from('users')
-      .select('generations_used, generations_limit')
-      .eq('id', session.user.id)
-      .single()
+    const count = await getUserGenerationCount(userId)
+    const canGenerate = count < 1
 
-    if (!data) {
-      return NextResponse.json({ allowed: false, error: 'Пользователь не найден' }, { status: 404 })
-    }
-
-    const allowed = data.generations_used < data.generations_limit
-
-    return NextResponse.json({
-      allowed,
-      used: data.generations_used,
-      limit: data.generations_limit,
+    return NextResponse.json({ 
+      canGenerate,
+      generationCount: count,
+      limit: 1
     })
-
   } catch (error: any) {
-    return NextResponse.json(
-      { allowed: false, error: error.message },
-      { status: 500 }
-    )
+    console.error('[CheckLimit] Error:', error.message)
+    return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
