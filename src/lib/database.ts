@@ -96,12 +96,12 @@ export async function getUserGenerationCount(userId: string): Promise<number> {
   
   const { data, error } = await supabase
     .from('users')
-    .select('generation_count')
+    .select('generations_used')
     .eq('id', userId)
     .maybeSingle()
 
   if (error) return 0
-  return data?.generation_count || 0
+  return data?.generations_used || 0
 }
 
 export async function incrementGenerationCount(userId: string): Promise<void> {
