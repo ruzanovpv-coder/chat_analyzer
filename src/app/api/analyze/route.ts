@@ -103,7 +103,24 @@ export async function POST(request: NextRequest) {
       ? createClient(supabaseUrl, serviceRoleKey, { auth: { autoRefreshToken: false, persistSession: false } })
       : createClient(supabaseUrl, anonKey, { auth: { autoRefreshToken: false, persistSession: false } })
 
-    console.log('[POST] Fetching analysis:', analysisId, sessionUserId)
+    console.log('[POST] Using client:', serviceRoleKey ? 'Service Role Key' : 'Anon Key')
+
+    // First, check if analysis exists at all (without user_id filter)
+    console.log('[POST] Checking if analysis exists:', analysisId)
+    const { data: anyAnalysis, error: anyError } = await dbClient
+      .from('analyses')
+      .select('id, user_id, status')
+      .eq('id', analysisId)
+      .maybeSingle()
+    
+    console.log('[POST] Analysis exists check:', { 
+      found: !!anyAnalysis, 
+      analysisUserId: anyAnalysis?.user_id,
+      status: anyAnalysis?.status,
+      error: anyError?.message 
+    })
+
+    console.log('[POST] Fetching analysis:', { analysisId, sessionUserId })
     const { data: analysis, error: fetchError } = await dbClient
       .from('analyses')
       .select('*')
@@ -111,13 +128,21 @@ export async function POST(request: NextRequest) {
       .eq('user_id', sessionUserId)
       .maybeSingle()
 
-    console.log('[POST] Fetch result:', { analysis: !!analysis, error: fetchError?.message })
+    console.log('[POST] Fetch result:', { 
+      analysis: !!analysis, 
+      analysisId: analysis?.id,
+      userId: analysis?.user_id,
+      status: analysis?.status,
+      error: fetchError?.message,
+      errorCode: fetchError?.code
+    })
 
     if (fetchError) {
       return NextResponse.json({ error: 'Fetch error: ' + fetchError.message }, { status: 500 })
     }
 
     if (!analysis) {
+      console.log('[POST] Analysis not found for:', { analysisId, sessionUserId })
       return NextResponse.json({ error: 'Not found' }, { status: 404 })
     }
 

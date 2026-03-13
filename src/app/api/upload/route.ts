@@ -16,6 +16,7 @@ export async function POST(request: NextRequest) {
     }
 
     const userId = session.user.id
+    console.log('[Upload] User ID:', userId)
 
     // Проверка лимита
     const { data: userData } = await supabase
@@ -84,6 +85,8 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (insertError) throw insertError
+
+    console.log('[Upload] Created analysis:', { id: analysis.id, user_id: userId })
 
     // Анализ запускается на странице результата (/result/[id]), чтобы запрос шёл
     // с пользовательской сессией (cookies) и не обрывался после ответа.

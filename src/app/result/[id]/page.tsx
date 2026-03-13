@@ -29,6 +29,9 @@ export default function ResultPage() {
           return
         }
 
+        console.log('[Result Page] User ID:', user.id)
+        console.log('[Result Page] Analysis ID:', analysisId)
+
         const { data, error } = await supabase
           .from('analyses')
           .select('*')
@@ -37,10 +40,12 @@ export default function ResultPage() {
           .single()
 
         if (error || !data) {
+          console.log('[Result Page] Analysis not found:', { error: error?.message, analysisId, userId: user.id })
           setError('Анализ не найден')
           return
         }
 
+        console.log('[Result Page] Analysis found:', { id: data.id, user_id: data.user_id, status: data.status })
         setAnalysis(data)
       } catch (err: any) {
         setError(err.message)
@@ -99,6 +104,7 @@ export default function ResultPage() {
         // Get JWT token from Supabase session
         const { data: { session } } = await supabase.auth.getSession()
         const token = session?.access_token
+        const userId = session?.user?.id
 
         const headers: Record<string, string> = {
           'Content-Type': 'application/json',
@@ -109,21 +115,26 @@ export default function ResultPage() {
           headers['Authorization'] = `Bearer ${token}`
         }
 
+        console.log('[Frontend] Starting analysis:', { analysisId, token: !!token, userId })
+
         const res = await fetch('/api/analyze', {
           method: 'POST',
           headers,
-          body: JSON.stringify({ analysisId }),
+          body: JSON.stringify({ analysisId: parseInt(analysisId, 10) }),
           credentials: 'include',
         })
+
+        console.log('[Frontend] Response status:', res.status)
 
         setStartLoading(false)
 
         if (!res.ok) {
           const data = await res.json().catch(() => ({}))
+          console.log('[Frontend] Error response:', data)
           throw new Error(data.error || 'Не удалось запустить анализ')
         }
       } catch (err: any) {
-        console.error('Start analysis error:', err)
+        console.error('[Frontend] Start analysis error:', err)
         setStartError(String(err?.message || err))
         setStartLoading(false)
         startedRef.current = false
