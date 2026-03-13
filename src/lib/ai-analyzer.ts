@@ -11,7 +11,7 @@ async function analyzeWithGemini(chatText: string): Promise<AnalysisResult> {
 
   const genAI = new GoogleGenerativeAI(apiKey)
   const model = genAI.getGenerativeModel({ 
-    model: process.env.GEMINI_MODEL || 'gemini-2.0-flash-exp'
+    model: process.env.GEMINI_MODEL || 'gemini-1.5-flash'
   })
 
   const prompt = `Проанализируй этот чат и дай подробный анализ:
