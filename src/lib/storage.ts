@@ -7,9 +7,15 @@ export async function uploadFile(userId: string, file: File): Promise<string> {
   const fileName = `${timestamp}_${randomId}.${file.name.split('.').pop()}`
   const filePath = `${userId}/${fileName}`
 
+  const arrayBuffer = await file.arrayBuffer()
+  const buffer = Buffer.from(arrayBuffer)
+
   const { error } = await supabase.storage
     .from('chat-files')
-    .upload(filePath, file)
+    .upload(filePath, buffer, {
+      contentType: file.type,
+      upsert: false
+    })
 
   if (error) throw new Error(`Upload failed: ${error.message}`)
   
