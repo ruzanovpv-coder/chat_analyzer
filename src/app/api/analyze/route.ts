@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { cookies } from 'next/headers'
 import { analyzeChatWithGemini } from '@/lib/gemini-api'
 import { analyzeChatWithCohere } from '@/lib/cohere-api'
 import { analyzeChatWithQwen } from '@/lib/qwen-api'
@@ -65,8 +67,24 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'analysisId invalid' }, { status: 400 })
   }
 
-  const sessionUserId = await getAuthenticatedUserId(request)
-  console.log('[POST] sessionUserId:', sessionUserId)
+  // Try session-based auth first (from cookies)
+  let sessionUserId: string | null = null
+  try {
+    const supabase = createRouteHandlerClient({ cookies })
+    const { data: { session } } = await supabase.auth.getSession()
+    if (session?.user?.id) {
+      sessionUserId = session.user.id
+      console.log('[POST] Got sessionUserId from cookies:', sessionUserId)
+    }
+  } catch (err) {
+    console.warn('[POST] Session auth failed:', err)
+  }
+
+  // Fallback to JWT token auth if session not found
+  if (!sessionUserId) {
+    sessionUserId = await getAuthenticatedUserId(request)
+    console.log('[POST] Got sessionUserId from JWT:', sessionUserId)
+  }
   
   if (!sessionUserId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -127,12 +145,20 @@ export async function POST(request: NextRequest) {
 
     let analysisResult
     try {
+      console.log('[POST] Trying Gemini...')
       analysisResult = await analyzeChatWithGemini(fileText)
-    } catch (e) {
+      console.log('[POST] Gemini success')
+    } catch (e: any) {
+      console.warn('[POST] Gemini failed:', e?.message)
       try {
+        console.log('[POST] Trying Cohere...')
         analysisResult = await analyzeChatWithCohere(fileText)
-      } catch (e2) {
+        console.log('[POST] Cohere success')
+      } catch (e2: any) {
+        console.warn('[POST] Cohere failed:', e2?.message)
+        console.log('[POST] Trying Qwen...')
         analysisResult = await analyzeChatWithQwen(fileText)
+        console.log('[POST] Qwen success')
       }
     }
 
@@ -160,6 +186,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, analysisId })
   } catch (error: any) {
     console.error('[POST] Error:', error?.message)
+    console.error('[POST] Error stack:', error?.stack)
 
     try {
       const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
