@@ -42,7 +42,7 @@ export default function FileUpload({ onUploadComplete }: FileUploadProps) {
       const checkResponse = await fetch('/api/check-limit')
       const checkData = await checkResponse.json()
 
-      if (!checkData.allowed) {
+      if (!checkData.canGenerate) {
         throw new Error('Лимит генераций исчерпан. Оплатите следующий анализ.')
       }
 
