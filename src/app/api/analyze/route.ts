@@ -164,7 +164,16 @@ export async function POST(request: NextRequest) {
 
     console.log('[POST] Downloading file:', analysis.file_path)
     console.log('[POST] Using service role:', !!serviceRoleKey)
-    const { data: fileData, error: downloadError } = await dbClient.storage.from('chat-files').download(analysis.file_path)
+    
+    // Create admin client for storage download (bypasses RLS)
+    const storageClient = serviceRoleKey
+      ? createClient(supabaseUrl, serviceRoleKey, { 
+          auth: { autoRefreshToken: false, persistSession: false },
+          global: { headers: { Authorization: `Bearer ${serviceRoleKey}` } }
+        })
+      : dbClient
+    
+    const { data: fileData, error: downloadError } = await storageClient.storage.from('chat-files').download(analysis.file_path)
     if (downloadError) {
       console.error('[POST] Download error:', downloadError)
       throw new Error('Download failed: ' + downloadError.message)
