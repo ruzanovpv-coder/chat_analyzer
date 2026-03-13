@@ -162,8 +162,14 @@ export async function POST(request: NextRequest) {
     if (lockError) throw new Error('Lock failed')
     if (!locked) return NextResponse.json({ success: true, status: 'processing', analysisId })
 
+    console.log('[POST] Downloading file:', analysis.file_path)
+    console.log('[POST] Using service role:', !!serviceRoleKey)
     const { data: fileData, error: downloadError } = await dbClient.storage.from('chat-files').download(analysis.file_path)
-    if (downloadError || !fileData) throw new Error('Download failed')
+    if (downloadError) {
+      console.error('[POST] Download error:', downloadError)
+      throw new Error('Download failed: ' + downloadError.message)
+    }
+    if (!fileData) throw new Error('Download failed: no data')
 
     const fileText = await fileData.text()
     console.log('[POST] File size:', fileText.length)
